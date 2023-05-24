@@ -1,5 +1,8 @@
+SQLITEDIR=$(PWD)/../sqlite
+FLAGS=-fPIC -shared
+INCLUDEDIR=-I$(SQLITEDIR)/build
 auroravfs.so:
-	gcc -fPIC -shared src/auroravfs.c -o auroravfs.so
+	$(CC) $(INCLUDEDIR) $(FLAGS) src/auroravfs.c -o auroravfs.so
 
 clean:
-	rm *.so
+	rm -f *.so
