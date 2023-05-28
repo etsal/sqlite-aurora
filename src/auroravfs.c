@@ -63,8 +63,6 @@ struct AuroraFile {
     int isAurMmap;                  /* Should we use Aurora methods or fallback to underlying VFS? */
     char *fileName;                 /* Name of file */
     int oid;                        /* Aurora partition OID */
-    int useMemsnap;                 /* Use memsnap or ckpt? */
-    int useAurWal;                  /* Use Aurora WAL or default */
 };
 
 /*
@@ -458,10 +456,6 @@ static int auroraOpen(
         if( p->szMax<p->sz ) return SQLITE_CANTOPEN;
         p->oid = sqlite3_uri_int64(zName,"oid",0);
         if( p->oid==0 ) return SQLITE_CANTOPEN;
-        p->useAurWal = sqlite3_uri_int64(zName,"useAurWal",-1);
-        if( p->useAurWal<0 ) return SQLITE_CANTOPEN;
-        p->useMemsnap = sqlite3_uri_int64(zName,"useMemsnap",-1);
-        if( p->useMemsnap<0 ) return SQLITE_CANTOPEN;
 
         mainDbName = sqlite3_malloc(strlen(zName));
         strcpy(mainDbName, zName);

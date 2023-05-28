@@ -1,5 +1,5 @@
 SQLITEDIR=$(PWD)/../sqlite
-FLAGS=-fPIC -shared -lsls
+FLAGS=-fPIC -shared -lsls -g
 INCLUDEDIR=-I$(SQLITEDIR)/build
 
 install: auroravfs.so
