@@ -38,6 +38,7 @@ SQLITE_EXTENSION_INIT1
 #include <string.h>
 #include <assert.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <sls.h>
 
 /*
@@ -159,12 +160,10 @@ static const sqlite3_io_methods aurora_io_methods = {
 */
 static int auroraClose(sqlite3_file *pFile){
     AuroraFile *p = (AuroraFile *)pFile;
-    if (p->isAurMmap) {
-        return SQLITE_OK;
-    } else {
-        int res = p->pReal->pMethods->xClose(p->pReal);
-        return res;
-    }
+    if (!p->isAurMmap)
+	    return p->pReal->pMethods->xClose(p->pReal);
+
+    return SQLITE_OK;
 }
 
 /*
@@ -177,13 +176,11 @@ static int auroraRead(
         sqlite_int64 iOfst
 ){
     AuroraFile *p = (AuroraFile *)pFile;
-    if (p->isAurMmap) {
-        AuroraFile *p = (AuroraFile *)pFile;
-        memcpy(zBuf, p->aData+iOfst, iAmt);
-        return SQLITE_OK;
-    } else {
+    if (!p->isAurMmap)
         return p->pReal->pMethods->xRead(p->pReal, zBuf, iAmt, iOfst);
-    }
+
+    memcpy(zBuf, p->aData + iOfst, iAmt);
+    return SQLITE_OK;
 }
 
 /*
@@ -196,17 +193,20 @@ static int auroraWrite(
         sqlite_int64 iOfst
 ){
     AuroraFile *p = (AuroraFile *)pFile;
-    if (p->isAurMmap) {
-        if( iOfst+iAmt>p->sz ){
-            if( iOfst+iAmt>p->szMax ) return SQLITE_FULL;
-            if( iOfst>p->sz ) memset(p->aData+p->sz, 0, iOfst-p->sz);
-            p->sz = iOfst+iAmt;
-        }
-        memcpy(p->aData+iOfst, z, iAmt);
-        return SQLITE_OK;
-    } else {
+    if (!p->isAurMmap)
         return p->pReal->pMethods->xWrite(p->pReal, z, iAmt, iOfst);
+
+    if (iOfst + iAmt > p->sz) {
+    	if(iOfst + iAmt > p->szMax)
+		return SQLITE_FULL;
+
+    	if(iOfst > p->sz)
+		memset(p->aData + p->sz, 0, iOfst - p->sz);
+
+    	p->sz = iOfst + iAmt;
     }
+    memcpy(p->aData + iOfst, z, iAmt);
+    return SQLITE_OK;
 }
 
 /*
@@ -214,31 +214,35 @@ static int auroraWrite(
 */
 static int auroraTruncate(sqlite3_file *pFile, sqlite_int64 size){
     AuroraFile *p = (AuroraFile *)pFile;
-    if (p->isAurMmap) {
-        if( size>p->sz ){
-            if( size>p->szMax ) return SQLITE_FULL;
-            memset(p->aData+p->sz, 0, size-p->sz);
-        }
-        p->sz = size;
-        return SQLITE_OK;
-    } else {
+    if (!p->isAurMmap)
         return p->pReal->pMethods->xTruncate(p->pReal, size);
+
+    if (size > p->sz) {
+    	if(size > p->szMax)
+		return SQLITE_FULL;
+
+    	memset(p->aData+p->sz, 0, size-p->sz);
     }
+
+    p->sz = size;
+    return SQLITE_OK;
 }
 
 /*
 ** Sync an aurora-file.
 */
 static int auroraSync(sqlite3_file *pFile, int flags){
+    int rc;
+
     AuroraFile *p = (AuroraFile *)pFile;
-    if (p->isAurMmap) {
-		int rc = sls_memsnap(p->oid, p->aData);
-		if (rc < 0)
-			return SQLITE_ERROR_SNAPSHOT;
-        return SQLITE_OK;
-    } else {
+    if (!p->isAurMmap)
         return p->pReal->pMethods->xSync(p->pReal, flags);
-    }
+
+    rc = sls_memsnap(p->oid, p->aData);
+    if (rc < 0)
+    	return SQLITE_ERROR_SNAPSHOT;
+
+    return SQLITE_OK;
 }
 
 /*
@@ -246,12 +250,11 @@ static int auroraSync(sqlite3_file *pFile, int flags){
 */
 static int auroraFileSize(sqlite3_file *pFile, sqlite_int64 *pSize){
     AuroraFile *p = (AuroraFile *)pFile;
-    if (p->isAurMmap) {
-        *pSize = p->sz;
-        return SQLITE_OK;
-    } else {
+    if (!p->isAurMmap) {
         return p->pReal->pMethods->xFileSize(p->pReal, pSize);
-    }
+
+    *pSize = p->sz;
+    return SQLITE_OK;
 }
 
 /*
@@ -559,20 +562,26 @@ static int auroraCurrentTimeInt64(sqlite3_vfs *pVfs, sqlite3_int64 *p){
 ** This routine is called when the extension is loaded.
 ** Register the new VFS.
 */
-#include <stdlib.h>
 int sqlite3_auroravfs_init(
         sqlite3 *db,
         char **pzErrMsg,
         const sqlite3_api_routines *pApi
 ){
+    sqlite3_vfs *pOrig;
     int rc = SQLITE_OK;
+
     SQLITE_EXTENSION_INIT2(pApi);
-    // Loads default VFS into pAppData
-    sqlite3_vfs* pOrig = sqlite3_vfs_find(0);
-    if( pOrig==0 ) return SQLITE_ERROR;
+
+    /* Loads default VFS into pAppData. */
+    pOrig = sqlite3_vfs_find(0);
+    if (pOrig == 0)
+	    return SQLITE_ERROR;
+
     aurora_vfs.pAppData = pOrig;
     aurora_vfs.szOsFile = pOrig->szOsFile + sizeof(AuroraFile);
     rc = sqlite3_vfs_register(&aurora_vfs, 1);
-    if( rc==SQLITE_OK ) rc = SQLITE_OK_LOAD_PERMANENTLY;
+    if (rc == SQLITE_OK)
+	    rc = SQLITE_OK_LOAD_PERMANENTLY;
+
     return rc;
 }
