@@ -1,6 +1,8 @@
-//
-// Created by Rakeeb Hossain on 2023-04-08.
-//
+/*
+ * Modified by Emil Tsalapatis on 2023-06-01.
+ * Created by Rakeeb Hossain on 2023-04-08.
+ */
+
 /*
 **
  * This is an in-memory VFS implementation that uses an application-supplied
@@ -149,7 +151,6 @@ static const sqlite3_io_methods aurora_io_methods = {
 };
 
 
-
 /*
 ** Close an aurora-file.
 **
@@ -157,14 +158,11 @@ static const sqlite3_io_methods aurora_io_methods = {
 ** to free.
 */
 static int auroraClose(sqlite3_file *pFile){
-    // printf("auroraClose\n");
     AuroraFile *p = (AuroraFile *)pFile;
     if (p->isAurMmap) {
         return SQLITE_OK;
     } else {
-        // printf("before...\n");
         int res = p->pReal->pMethods->xClose(p->pReal);
-        // printf("after...\n");
         return res;
     }
 }
@@ -178,7 +176,6 @@ static int auroraRead(
         int iAmt,
         sqlite_int64 iOfst
 ){
-    // printf("auroraRead\n");
     AuroraFile *p = (AuroraFile *)pFile;
     if (p->isAurMmap) {
         AuroraFile *p = (AuroraFile *)pFile;
@@ -198,7 +195,6 @@ static int auroraWrite(
         int iAmt,
         sqlite_int64 iOfst
 ){
-    // printf("auroraWrite\n");
     AuroraFile *p = (AuroraFile *)pFile;
     if (p->isAurMmap) {
         if( iOfst+iAmt>p->sz ){
@@ -217,7 +213,6 @@ static int auroraWrite(
 ** Truncate an aurora-file.
 */
 static int auroraTruncate(sqlite3_file *pFile, sqlite_int64 size){
-    // printf("auroraTruncate\n");
     AuroraFile *p = (AuroraFile *)pFile;
     if (p->isAurMmap) {
         if( size>p->sz ){
@@ -235,13 +230,11 @@ static int auroraTruncate(sqlite3_file *pFile, sqlite_int64 size){
 ** Sync an aurora-file.
 */
 static int auroraSync(sqlite3_file *pFile, int flags){
-    // printf("auroraSync\n");
     AuroraFile *p = (AuroraFile *)pFile;
     if (p->isAurMmap) {
 		int rc = sls_memsnap(p->oid, p->aData);
-		if (rc < 0) {
+		if (rc < 0)
 			return SQLITE_ERROR_SNAPSHOT;
-		}
         return SQLITE_OK;
     } else {
         return p->pReal->pMethods->xSync(p->pReal, flags);
@@ -252,7 +245,6 @@ static int auroraSync(sqlite3_file *pFile, int flags){
 ** Return the current file-size of an aurora-file.
 */
 static int auroraFileSize(sqlite3_file *pFile, sqlite_int64 *pSize){
-    // printf("auroraFileSz\n");
     AuroraFile *p = (AuroraFile *)pFile;
     if (p->isAurMmap) {
         *pSize = p->sz;
@@ -266,7 +258,6 @@ static int auroraFileSize(sqlite3_file *pFile, sqlite_int64 *pSize){
 ** Lock an aurora-file.
 */
 static int auroraLock(sqlite3_file *pFile, int eLock){
-    // printf("auroraLock\n");
     AuroraFile *p = (AuroraFile *)pFile;
     if (p->isAurMmap) {
         return SQLITE_OK;
@@ -279,9 +270,7 @@ static int auroraLock(sqlite3_file *pFile, int eLock){
 ** Unlock an aurora-file.
 */
 static int auroraUnlock(sqlite3_file *pFile, int eLock){
-    // printf("auroraUnlock\n");
     AuroraFile *p = (AuroraFile *)pFile;
-    // printf("Unlocking file %s\n", p->fileName);
     if (p->isAurMmap) {
         return SQLITE_OK;
     } else {
@@ -294,7 +283,6 @@ static int auroraUnlock(sqlite3_file *pFile, int eLock){
 ** Check if another file-handle holds a RESERVED lock on an aurora-file.
 */
 static int auroraCheckReservedLock(sqlite3_file *pFile, int *pResOut){
-    // printf("auroraCkReservedLock\n");
     AuroraFile *p = (AuroraFile *)pFile;
     if (p->isAurMmap) {
         *pResOut = 0;
@@ -308,7 +296,6 @@ static int auroraCheckReservedLock(sqlite3_file *pFile, int *pResOut){
 ** File control method. For custom operations on an aurora-file.
 */
 static int auroraFileControl(sqlite3_file *pFile, int op, void *pArg){
-    // printf("auroraFC\n");
     AuroraFile *p = (AuroraFile *)pFile;
     if (p->isAurMmap) {
         int rc = SQLITE_NOTFOUND;
@@ -326,7 +313,6 @@ static int auroraFileControl(sqlite3_file *pFile, int op, void *pArg){
 ** Return the sector-size in bytes for an aurora-file.
 */
 static int auroraSectorSize(sqlite3_file *pFile){
-    // printf("auroraSectorSz\n");
     AuroraFile *p = (AuroraFile *)pFile;
     if (p->isAurMmap) {
         return 1024;
@@ -339,7 +325,6 @@ static int auroraSectorSize(sqlite3_file *pFile){
 ** Return the device characteristic flags supported by an aurora-file.
 */
 static int auroraDeviceCharacteristics(sqlite3_file *pFile){
-    // printf("auroraDeviceChars\n");
     AuroraFile *p = (AuroraFile *)pFile;
     if (p->isAurMmap) {
         return SQLITE_IOCAP_ATOMIC |
@@ -359,7 +344,6 @@ static int auroraShmMap(
         int bExtend,
         void volatile **pp
 ){
-    // printf("auroraShmMap\n");
     AuroraFile *p = (AuroraFile *)pFile;
     if (p->isAurMmap) {
         return SQLITE_IOERR_SHMMAP;
@@ -370,7 +354,6 @@ static int auroraShmMap(
 
 /* Perform locking on a shared-memory segment */
 static int auroraShmLock(sqlite3_file *pFile, int offset, int n, int flags){
-    // printf("auroraShmLock\n");
     AuroraFile *p = (AuroraFile *)pFile;
     if (p->isAurMmap) {
         return SQLITE_IOERR_SHMLOCK;
@@ -381,7 +364,6 @@ static int auroraShmLock(sqlite3_file *pFile, int offset, int n, int flags){
 
 /* Memory barrier operation on shared memory */
 static void auroraShmBarrier(sqlite3_file *pFile){
-    // printf("auroraShmBarrier\n");
     AuroraFile *p = (AuroraFile *)pFile;
     if (p->isAurMmap) {
         return;
@@ -392,7 +374,6 @@ static void auroraShmBarrier(sqlite3_file *pFile){
 
 /* Unmap a shared memory segment */
 static int auroraShmUnmap(sqlite3_file *pFile, int deleteFlag){
-    // printf("auroraShmUnmap\n");
     AuroraFile *p = (AuroraFile *)pFile;
     if (p->isAurMmap) {
         return SQLITE_OK;
@@ -408,7 +389,6 @@ static int auroraFetch(
         int iAmt,
         void **pp
 ){
-    // printf("auroraFetch\n");
     AuroraFile *p = (AuroraFile *)pFile;
     if (p->isAurMmap) {
         *pp = (void*)(p->aData + iOfst);
@@ -420,7 +400,6 @@ static int auroraFetch(
 
 /* Release a memory-mapped page */
 static int auroraUnfetch(sqlite3_file *pFile, sqlite3_int64 iOfst, void *pPage){
-    // printf("auroraUnfetch\n");
     AuroraFile *p = (AuroraFile *)pFile;
     if (p->isAurMmap) {
         return SQLITE_OK;
@@ -480,7 +459,6 @@ static int auroraOpen(
 ** returning.
 */
 static int auroraDelete(sqlite3_vfs *pVfs, const char *zPath, int dirSync){
-    // printf("auroraDelete\n");
     return ORIGVFS(pVfs)->xDelete(ORIGVFS(pVfs), zPath, dirSync);
 }
 
@@ -494,8 +472,6 @@ static int auroraAccess(
         int flags,
         int *pResOut
 ){
-    // printf("auroraAccess\n");
-    // printf("DEBUG: %s %d\n", zPath, flags);
     if (mainDbName != NULL && strcmp(zPath, mainDbName) == 0) {
         *pResOut = 1;
         return SQLITE_OK;
@@ -523,7 +499,6 @@ static int auroraFullPathname(
 ** Open the dynamic library located at zPath and return a handle.
 */
 static void *auroraDlOpen(sqlite3_vfs *pVfs, const char *zPath){
-    // printf("auroraDLOpen\n");
     return ORIGVFS(pVfs)->xDlOpen(ORIGVFS(pVfs), zPath);
 }
 
