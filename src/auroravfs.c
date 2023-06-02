@@ -250,7 +250,7 @@ static int auroraSync(sqlite3_file *pFile, int flags){
 */
 static int auroraFileSize(sqlite3_file *pFile, sqlite_int64 *pSize){
     AuroraFile *p = (AuroraFile *)pFile;
-    if (!p->isAurMmap) {
+    if (!p->isAurMmap)
         return p->pReal->pMethods->xFileSize(p->pReal, pSize);
 
     *pSize = p->sz;
@@ -329,14 +329,13 @@ static int auroraSectorSize(sqlite3_file *pFile){
 */
 static int auroraDeviceCharacteristics(sqlite3_file *pFile){
     AuroraFile *p = (AuroraFile *)pFile;
-    if (p->isAurMmap) {
-        return SQLITE_IOCAP_ATOMIC |
-               SQLITE_IOCAP_POWERSAFE_OVERWRITE |
-               SQLITE_IOCAP_SAFE_APPEND |
-               SQLITE_IOCAP_SEQUENTIAL;
-    } else {
+    if (!p->isAurMmap)
         return p->pReal->pMethods->xDeviceCharacteristics(p->pReal);
-    }
+
+    return SQLITE_IOCAP_ATOMIC |
+           SQLITE_IOCAP_POWERSAFE_OVERWRITE |
+           SQLITE_IOCAP_SAFE_APPEND |
+           SQLITE_IOCAP_SEQUENTIAL;
 }
 
 /* Create a shared memory file mapping */
@@ -348,41 +347,47 @@ static int auroraShmMap(
         void volatile **pp
 ){
     AuroraFile *p = (AuroraFile *)pFile;
-    if (p->isAurMmap) {
-        return SQLITE_IOERR_SHMMAP;
-    } else {
+    if (!p->isAurMmap)
         return p->pReal->pMethods->xShmMap(p->pReal, iPg, pgsz, bExtend, pp);
-    }
+
+    /* 
+     * XXX Implement this; returning a pointer 
+     * into the mapped region should be fine.
+     */
+    return SQLITE_IOERR_SHMMAP;
 }
 
 /* Perform locking on a shared-memory segment */
 static int auroraShmLock(sqlite3_file *pFile, int offset, int n, int flags){
     AuroraFile *p = (AuroraFile *)pFile;
-    if (p->isAurMmap) {
-        return SQLITE_IOERR_SHMLOCK;
-    } else {
+    if (!p->isAurMmap)
         return p->pReal->pMethods->xShmLock(p->pReal, offset, n, flags);
-    }
+
+    /* 
+     * XXX Implement this; using a no-op if fine right now 
+     * because we do not need to open the database from
+     * multiple processes.
+     */
+    return SQLITE_IOERR_SHMLOCK;
 }
 
 /* Memory barrier operation on shared memory */
 static void auroraShmBarrier(sqlite3_file *pFile){
     AuroraFile *p = (AuroraFile *)pFile;
-    if (p->isAurMmap) {
-        return;
-    } else {
-        p->pReal->pMethods->xShmBarrier(p->pReal);
-    }
+    if (!p->isAurMmap)
+    	p->pReal->pMethods->xShmBarrier(p->pReal);
+
+    /* XXX Find a way to call this function. */
+    //sqlite3MemoryBarrier();
 }
 
 /* Unmap a shared memory segment */
 static int auroraShmUnmap(sqlite3_file *pFile, int deleteFlag){
     AuroraFile *p = (AuroraFile *)pFile;
-    if (p->isAurMmap) {
-        return SQLITE_OK;
-    } else {
+    if (!p->isAurMmap)
         return p->pReal->pMethods->xShmUnmap(p->pReal, deleteFlag);
-    }
+
+    return SQLITE_OK;
 }
 
 /* Fetch a page of a memory-mapped file */
