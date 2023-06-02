@@ -56,6 +56,8 @@ typedef struct AuroraFile AuroraFile;
 /* Static */
 static char *mainDbName = NULL;
 
+#define AURORAVFS_CKPT_THRESHOLD (65536)
+
 /* An open file */
 struct AuroraFile {
     sqlite3_file base;              /* IO methods */
@@ -65,6 +67,7 @@ struct AuroraFile {
     sqlite3_file *pReal;            /* The real underlying file */
     int isAurMmap;                  /* Should we use Aurora methods or fallback to underlying VFS? */
     char *fileName;                 /* Name of file */
+    sqlite_int64 szWritten;	    /* Bytes written since last snapshot */
     int oid;                        /* Aurora partition OID */
 };
 
@@ -192,20 +195,30 @@ static int auroraWrite(
         int iAmt,
         sqlite_int64 iOfst
 ){
+    const size_t szEnd = iOfst + iAmt;
+    int rc;
+
     AuroraFile *p = (AuroraFile *)pFile;
     if (!p->isAurMmap)
         return p->pReal->pMethods->xWrite(p->pReal, z, iAmt, iOfst);
 
-    if (iOfst + iAmt > p->sz) {
-    	if(iOfst + iAmt > p->szMax)
-		return SQLITE_FULL;
+    if(szEnd > p->szMax)
+    	return SQLITE_FULL;
 
-    	if(iOfst > p->sz)
-		memset(p->aData + p->sz, 0, iOfst - p->sz);
-
-    	p->sz = iOfst + iAmt;
-    }
+    /* Copy in the data and possibly adjust the file size. */
+    p->sz = szEnd > p->sz ? szEnd : p->sz;
     memcpy(p->aData + iOfst, z, iAmt);
+
+    /* Check if we went over the checkpointing threshold. */
+    p->szWritten += iAmt;
+    if (p->szWritten > AURORAVFS_CKPT_THRESHOLD) {
+    	rc = sls_memsnap(p->oid, p->aData);
+	if (rc < 0)
+		return SQLITE_ERROR_SNAPSHOT;
+
+	p->szWritten = 0;
+    }
+
     return SQLITE_OK;
 }
 
@@ -238,9 +251,14 @@ static int auroraSync(sqlite3_file *pFile, int flags){
     if (!p->isAurMmap)
         return p->pReal->pMethods->xSync(p->pReal, flags);
 
+    if (p->szWritten == 0)
+	    return SQLITE_OK;
+
     rc = sls_memsnap(p->oid, p->aData);
     if (rc < 0)
-    	return SQLITE_ERROR_SNAPSHOT;
+	return SQLITE_ERROR_SNAPSHOT;
+
+    p->szWritten = 0;
 
     return SQLITE_OK;
 }
