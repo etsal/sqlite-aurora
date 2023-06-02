@@ -53,10 +53,7 @@ typedef struct AuroraFile AuroraFile;
 #define ORIGVFS(p) ((sqlite3_vfs*)((p)->pAppData))
 #define ORIGFILE(p) ((sqlite3_file*)(((AuroraFile*)(p))+1))
 
-/* Static */
 static char *mainDbName = NULL;
-
-#define AURORAVFS_CKPT_THRESHOLD (65536)
 
 /* An open file */
 struct AuroraFile {
@@ -68,6 +65,7 @@ struct AuroraFile {
     int isAurMmap;                  /* Should we use Aurora methods or fallback to underlying VFS? */
     char *fileName;                 /* Name of file */
     sqlite_int64 szWritten;	    /* Bytes written since last snapshot */
+    sqlite_uint64 szThreshold;	    /* Checkpointing threshold */
     int oid;                        /* Aurora partition OID */
 };
 
@@ -211,7 +209,7 @@ static int auroraWrite(
 
     /* Check if we went over the checkpointing threshold. */
     p->szWritten += iAmt;
-    if (p->szWritten > AURORAVFS_CKPT_THRESHOLD) {
+    if (p->szWritten > p->szThreshold) {
     	rc = sls_memsnap(p->oid, p->aData);
 	if (rc < 0)
 		return SQLITE_ERROR_SNAPSHOT;
@@ -461,6 +459,8 @@ static int auroraOpen(
         if( p->szMax<p->sz ) return SQLITE_CANTOPEN;
         p->oid = sqlite3_uri_int64(zName,"oid",0);
         if( p->oid==0 ) return SQLITE_CANTOPEN;
+        p->szThreshold = sqlite3_uri_int64(zName,"threshold",0);
+        if( p->szThreshold ==0 ) return SQLITE_CANTOPEN;
 
         mainDbName = sqlite3_malloc(strlen(zName));
         strcpy(mainDbName, zName);
