@@ -66,6 +66,7 @@ struct AuroraFile {
     char *fileName;                 /* Name of file */
     sqlite_int64 szWritten;	    /* Bytes written since last snapshot */
     sqlite_uint64 szThreshold;	    /* Checkpointing threshold */
+    bool bCkptOnSync;	    	    /* Checkpoint on xSync()? */
     int oid;                        /* Aurora partition OID */
 };
 
@@ -254,7 +255,7 @@ static int auroraSync(sqlite3_file *pFile, int flags){
     if (!p->isAurMmap)
         return p->pReal->pMethods->xSync(p->pReal, flags);
 
-    if (p->szWritten == 0)
+    if (!p->bCkptOnSync || p->szWritten == 0)
 	    return SQLITE_OK;
 
     rc = sls_memsnap(p->oid, p->aData);
@@ -474,6 +475,12 @@ static int auroraOpen(
 	 * does not trigger checkpointing at all.
 	 */
         p->szThreshold = sqlite3_uri_int64(zName, "threshold", 0);
+
+	/*
+	 * Configure triggering checkpointing on xSync.
+	 * The default is to keep checkpointing on.
+	 */
+        p->bCkptOnSync = sqlite3_uri_int64(zName, "ckptOnSync", 1) > 0;
 
         mainDbName = sqlite3_malloc(strlen(zName));
         strcpy(mainDbName, zName);
