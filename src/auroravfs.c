@@ -209,6 +209,11 @@ static int auroraWrite(
 
     /* Check if we went over the checkpointing threshold. */
     p->szWritten += iAmt;
+
+    /* A 0 threshold turns off xWrite() checkpointing. */
+    if (p->szThreshold == 0)
+	    return SQLITE_OK;
+
     if (p->szWritten > p->szThreshold) {
     	rc = sls_memsnap(p->oid, p->aData);
 	if (rc < 0)
@@ -464,9 +469,11 @@ static int auroraOpen(
         if (p->oid == 0)
 		return SQLITE_CANTOPEN;
 
+	/* 
+	 * Threshold can be 0, in which case xWrite() 
+	 * does not trigger checkpointing at all.
+	 */
         p->szThreshold = sqlite3_uri_int64(zName, "threshold", 0);
-        if (p->szThreshold == 0)
-		return SQLITE_CANTOPEN;
 
         mainDbName = sqlite3_malloc(strlen(zName));
         strcpy(mainDbName, zName);
