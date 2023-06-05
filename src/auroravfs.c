@@ -200,7 +200,7 @@ static int auroraWrite(
     if (!p->isAurMmap)
         return p->pReal->pMethods->xWrite(p->pReal, z, iAmt, iOfst);
 
-    if(szEnd > p->szMax)
+    if (szEnd > p->szMax)
     	return SQLITE_FULL;
 
     /* Copy in the data and possibly adjust the file size. */
@@ -229,7 +229,7 @@ static int auroraTruncate(sqlite3_file *pFile, sqlite_int64 size){
         return p->pReal->pMethods->xTruncate(p->pReal, size);
 
     if (size > p->sz) {
-    	if(size > p->szMax)
+    	if (size > p->szMax)
 		return SQLITE_FULL;
 
     	memset(p->aData+p->sz, 0, size-p->sz);
@@ -278,11 +278,10 @@ static int auroraFileSize(sqlite3_file *pFile, sqlite_int64 *pSize){
 */
 static int auroraLock(sqlite3_file *pFile, int eLock){
     AuroraFile *p = (AuroraFile *)pFile;
-    if (p->isAurMmap) {
-        return SQLITE_OK;
-    } else {
-        return p->pReal->pMethods->xLock(p->pReal, eLock);
-    }
+    if (!p->isAurMmap)
+        p->pReal->pMethods->xLock(p->pReal, eLock);
+    
+    return SQLITE_OK;
 }
 
 /*
@@ -290,12 +289,10 @@ static int auroraLock(sqlite3_file *pFile, int eLock){
 */
 static int auroraUnlock(sqlite3_file *pFile, int eLock){
     AuroraFile *p = (AuroraFile *)pFile;
-    if (p->isAurMmap) {
-        return SQLITE_OK;
-    } else {
-        int rc = p->pReal->pMethods->xUnlock(p->pReal, eLock);
-        return rc;
-    }
+    if (!p->isAurMmap)
+	p->pReal->pMethods->xUnlock(p->pReal, eLock);
+	
+    return SQLITE_OK;
 }
 
 /*
@@ -303,12 +300,11 @@ static int auroraUnlock(sqlite3_file *pFile, int eLock){
 */
 static int auroraCheckReservedLock(sqlite3_file *pFile, int *pResOut){
     AuroraFile *p = (AuroraFile *)pFile;
-    if (p->isAurMmap) {
-        *pResOut = 0;
-        return SQLITE_OK;
-    } else {
+    if (!p->isAurMmap)
         return p->pReal->pMethods->xCheckReservedLock(p->pReal, pResOut);
-    }
+
+    *pResOut = 0;
+    return SQLITE_OK;
 }
 
 /*
@@ -316,16 +312,18 @@ static int auroraCheckReservedLock(sqlite3_file *pFile, int *pResOut){
 */
 static int auroraFileControl(sqlite3_file *pFile, int op, void *pArg){
     AuroraFile *p = (AuroraFile *)pFile;
-    if (p->isAurMmap) {
-        int rc = SQLITE_NOTFOUND;
-        if( op==SQLITE_FCNTL_VFSNAME ){
-            *(char**)pArg = sqlite3_mprintf("aurora(%p,%lld)", p->aData, p->sz);
-            rc = SQLITE_OK;
-        }
-        return rc;
-    } else {
+    int rc;
+
+    if (!p->isAurMmap)
         return p->pReal->pMethods->xFileControl(p->pReal, op, pArg);
+
+    rc = SQLITE_NOTFOUND;
+    if (op == SQLITE_FCNTL_VFSNAME) {
+        *(char**)pArg = sqlite3_mprintf("aurora(%p,%lld)", p->aData, p->sz);
+        rc = SQLITE_OK;
     }
+
+    return rc;
 }
 
 /*
@@ -333,11 +331,10 @@ static int auroraFileControl(sqlite3_file *pFile, int op, void *pArg){
 */
 static int auroraSectorSize(sqlite3_file *pFile){
     AuroraFile *p = (AuroraFile *)pFile;
-    if (p->isAurMmap) {
-        return 1024;
-    } else {
+    if (!p->isAurMmap)
         return p->pReal->pMethods->xSectorSize(p->pReal);
-    }
+
+    return 1024;
 }
 
 /*
@@ -451,16 +448,25 @@ static int auroraOpen(
     p->isAurMmap = isAurMmap;
 
     if (isAurMmap) {
-        p->aData = (unsigned char*)sqlite3_uri_int64(zName,"ptr",0);
-        if( p->aData==0 ) return SQLITE_CANTOPEN;
-        p->sz = sqlite3_uri_int64(zName,"sz",-1);
-        if( p->sz<0 ) return SQLITE_CANTOPEN;
-        p->szMax = sqlite3_uri_int64(zName,"max",p->sz);
-        if( p->szMax<p->sz ) return SQLITE_CANTOPEN;
-        p->oid = sqlite3_uri_int64(zName,"oid",0);
-        if( p->oid==0 ) return SQLITE_CANTOPEN;
-        p->szThreshold = sqlite3_uri_int64(zName,"threshold",0);
-        if( p->szThreshold ==0 ) return SQLITE_CANTOPEN;
+        p->aData = (unsigned char*)sqlite3_uri_int64(zName,"ptr", 0);
+        if (p->aData == 0)
+		return SQLITE_CANTOPEN;
+
+        p->sz = sqlite3_uri_int64(zName, "sz", -1);
+        if (p->sz < 0)
+		return SQLITE_CANTOPEN;
+
+        p->szMax = sqlite3_uri_int64(zName, "max", p->sz);
+        if (p->szMax < p->sz)
+		return SQLITE_CANTOPEN;
+
+        p->oid = sqlite3_uri_int64(zName, "oid", 0);
+        if (p->oid == 0)
+		return SQLITE_CANTOPEN;
+
+        p->szThreshold = sqlite3_uri_int64(zName, "threshold", 0);
+        if (p->szThreshold == 0)
+		return SQLITE_CANTOPEN;
 
         mainDbName = sqlite3_malloc(strlen(zName));
         strcpy(mainDbName, zName);
