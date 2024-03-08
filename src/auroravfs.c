@@ -37,9 +37,10 @@
 SQLITE_EXTENSION_INIT1
 #include <string.h>
 #include <assert.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <sls.h>
+#include <sls_wal.h>
 
 /*
 ** Forward declaration of objects used by this utility
@@ -67,7 +68,7 @@ struct AuroraFile {
     sqlite_int64 szWritten;	    /* Bytes written since last snapshot */
     sqlite_uint64 szThreshold;	    /* Checkpointing threshold */
     bool bCkptOnSync;	    	    /* Checkpoint on xSync()? */
-    int oid;                        /* Aurora partition OID */
+    int fd;                         /* Aurora SAS fd */
 };
 
 /*
@@ -216,7 +217,8 @@ static int auroraWrite(
 	    return SQLITE_OK;
 
     if (p->szWritten > p->szThreshold) {
-    	rc = sls_memsnap(p->oid, p->aData);
+	
+	rc = sas_trace_commit(p->fd);
 	if (rc < 0)
 		return SQLITE_ERROR_SNAPSHOT;
 
@@ -258,7 +260,7 @@ static int auroraSync(sqlite3_file *pFile, int flags){
     if (!p->bCkptOnSync || p->szWritten == 0)
 	    return SQLITE_OK;
 
-    rc = sls_memsnap(p->oid, p->aData);
+    rc = sas_trace_commit(p->fd);
     if (rc < 0)
 	return SQLITE_ERROR_SNAPSHOT;
 
@@ -466,10 +468,12 @@ static int auroraOpen(
         if (p->szMax < p->sz)
 		return SQLITE_CANTOPEN;
 
-        p->oid = sqlite3_uri_int64(zName, "oid", 0);
-        if (p->oid == 0)
+        p->fd = sqlite3_uri_int64(zName, "fd", 0);
+        if (p->fd == 0)
 		return SQLITE_CANTOPEN;
 
+	if (sas_trace_start(p->fd) != 0)
+		return SQLITE_INTERNAL;
 	/* 
 	 * Threshold can be 0, in which case xWrite() 
 	 * does not trigger checkpointing at all.
