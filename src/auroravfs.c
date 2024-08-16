@@ -40,7 +40,12 @@ SQLITE_EXTENSION_INIT1
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
+
+#ifndef USE_MSNP_OBJSNP
 #include <sls_wal.h>
+#else
+#include <memsnap.h>
+#endif
 
 /*
 ** Forward declaration of objects used by this utility
